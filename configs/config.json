@@ -1,7 +1,7 @@
 {
   "seed": 42,
   "lvm": {
-    "n_latent": 1024
+    "n_latent": 2048
   },
   "transcode": {
     "bs": 32, 
@@ -13,13 +13,15 @@
       "n_sample": 8
     },
     "train": {
-      "ckpt_dir": "../checkpoints",
+      "ckpt_dir": "checkpoints",
       "lr": 0.0001,
-      "ckpt_interval": 100,
-      "data_dir": "../data/single_recording",
-      "bs": 8,
-      "metrics_path": "../logs/loss_vae_single.txt",
-      "clip_norm": 10
+      "ckpt_interval": 5000,
+      "data_dir_train": "../../data/training_small",
+      "data_dir_val": "../../data/validation_small",
+      "bs": 64,
+      "metrics_path": "../../logs/loss_vae_michelle.txt",
+      "clip_norm": 10,
+      "kl_alpha": 1
     }
   },
   "dt": {

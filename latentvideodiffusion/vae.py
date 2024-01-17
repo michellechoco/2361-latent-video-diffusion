@@ -139,14 +139,16 @@ def reconstruct(args, cfg):
     utils.show_samples(samples)
 
 def train(args, cfg):
+    print("Entered VAE Training Function")
     ckpt_dir = cfg["vae"]["train"]["ckpt_dir"]
     lr = cfg["vae"]["train"]["lr"]
     ckpt_interval = cfg["vae"]["train"]["ckpt_interval"]
-    video_paths = cfg["vae"]["train"]["data_dir"]
+    video_paths_train = cfg["vae"]["train"]["data_dir_train"]
+    video_paths_val = cfg["vae"]["train"]["data_dir_val"]
     batch_size = cfg["vae"]["train"]["bs"]
     clip_norm = cfg["vae"]["train"]["clip_norm"]
     metrics_path = cfg["vae"]["train"]["metrics_path"]
-    
+    kl_a = cfg["vae"]["train"]["kl_alpha"]
     adam_optimizer = optax.adam(lr)
     optimizer = optax.chain(adam_optimizer, optax.zero_nans(), optax.clip_by_global_norm(clip_norm))
     
@@ -164,25 +166,91 @@ def train(args, cfg):
     dir_name = os.path.dirname(metrics_path)
     if not os.path.exists(dir_name):
         os.makedirs(dir_name)
-
-    with open(metrics_path,"w") as f:
+    ################### ORIGINAL TRAINING LOOP #####################
+    with open(metrics_path,"a") as f:
         #TODO: Fix Frame extractor rng
-        with frame_extractor.FrameExtractor(video_paths, batch_size, state[2]) as fe:
-            for _ in utils.tqdm_inf():
-                data = jnp.array(next(fe),dtype=jnp.float32)
-                loss, state = utils.update_state(state, data, optimizer, vae_loss)
+        with frame_extractor.FrameExtractor(video_paths_train, batch_size, state[2]) as train_fe:
+            with frame_extractor.FrameExtractor(video_paths_val, batch_size, state[2]) as val_fe:
+                for _ in utils.tqdm_inf():
+                    # Process input data
+                    #loop_time = time.time()
+                    train_data = jnp.array(next(train_fe), dtype=jnp.float32)
+                    val_data = jnp.array(next(val_fe), dtype=jnp.float32)
+                    #print("Processed input data in ", time.time()-loop_time, " seconds")
+                    #loop_time = time.time()
+                    # Update state
+                    val_loss, _ = utils.update_state(state, val_data, optimizer, vae_loss)
+                    train_loss, state = utils.update_state(state, train_data, optimizer, vae_loss)
+                    #print("Updated state in ", time.time()-loop_time, " seconds")
+                    # Print or log training and validation losses
+                    #print(f"Training Loss: {train_loss}, Validation Loss: {val_loss}")
 
-                # iteration = state[3]
-                # print("iteration ", iteration)
-                # if iteration == 1:
-                #     print("SAVING")
-                #     ckpt_path = utils.ckpt_path(ckpt_dir, 0, "simonvae")
-                #     utils.save_checkpoint(state, ckpt_path)
+                    # Save metrics to file
+                    f.write(f"{train_loss}\t{val_loss}\n")
+                    f.flush()
+                    iteration = state[3]
+                    if (iteration % ckpt_interval) == (ckpt_interval - 1):
+                        ckpt_path = utils.ckpt_path(ckpt_dir, iteration+1, "vae")
+                        utils.save_checkpoint(state, ckpt_path)
+                        print("---------CHECKPOINT SAVED----------")
 
-                f.write(f"{loss}\n")
-                f.flush()
-                iteration = state[3]
-                if (iteration % ckpt_interval) == (ckpt_interval - 1):
-                    ckpt_path = utils.ckpt_path(ckpt_dir, iteration+1, "vae")
-                    utils.save_checkpoint(state, ckpt_path)
-                    print("---------CHECKPOINT SAVED----------")
+    # ################ REVISED TRAINING LOOP WITH DATA PARALLELISM ###############
+
+    # # Checking the number of devices we have here
+    # num_devices = len(jax.local_devices())
+    # print(f"Running on {num_devices} devices")
+
+    # # Get the device array
+    # devices = mesh_utils.create_device_mesh((num_devices,))
+    # print(f"Device Array: \n\n{devices}\n")
+
+    # # Create a mesh from the device array
+    # mesh = Mesh(devices, axis_names=("ax"))
+
+    # # Define sharding with a partiton spec
+    # sharding = NamedSharding(mesh, P("ax"))
+
+    # print(f"Number of logical devices: {len(devices)}")
+    # print(f"Shape of device array    : {devices.shape}")
+    # print(f"\nMesh     : {mesh}")
+    # print(f"Sharding : {sharding}\n\n")
+
+    # with open(metrics_path,"a") as f:
+    #     #TODO: Fix Frame extractor rng
+    #     with frame_extractor.FrameExtractor(video_paths_train, batch_size, state[2]) as train_fe:
+    #         with frame_extractor.FrameExtractor(video_paths_val, batch_size, state[2]) as val_fe:
+    #             for _ in utils.tqdm_inf():
+    #                 # Training iteration
+    #                 train_data = jnp.array(next(train_fe), dtype=jnp.float32)
+    #                 train_data = jax.device_put(train_data, sharding)
+    #                 print(f"Shard shape: {sharding.shard_shape(train_data.shape)}")  
+    #                 train_loss, state = utils.update_state(state, train_data, optimizer, vae_loss)
+
+    #                 # Validation iteration
+    #                 val_data = jnp.array(next(val_fe), dtype=jnp.float32)
+    #                 val_data = jax.device_put(val_data, sharding)
+    #                 val_loss, _ = utils.update_state(state, val_data, optimizer, vae_loss)
+
+    #                 # Print or log training and validation losses
+    #                 #print(f"Training Loss: {train_loss}, Validation Loss: {val_loss}")
+
+    #                 # Save metrics to file
+    #                 f.write(f"{train_loss}\t{val_loss}\n")
+    #                 f.flush()
+    #                 iteration = state[3]
+    #                 if (iteration % ckpt_interval) == (ckpt_interval - 1):
+    #                     ckpt_path = utils.ckpt_path(ckpt_dir, iteration+1, "vae")
+    #                     utils.save_checkpoint(state, ckpt_path)
+    #                     print("---------CHECKPOINT SAVED----------")
+
+    ### FOR DEBUGGING ###
+
+    # # Train data
+    # train_fe = frame_extractor.FrameExtractor(video_paths_train, batch_size, state[2])
+    # train_data = jnp.array(next(train_fe), dtype=jnp.float32)
+
+    # # Shard the data
+    # sharded_data = jax.device_put(train_data, sharding)
+
+    # print(f"Data  shape: {train_data.shape}")
+    # print(f"Shard shape: {sharding.shard_shape(train_data.shape)}")        
