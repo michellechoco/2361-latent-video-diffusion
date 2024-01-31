@@ -28,17 +28,11 @@ class FrameExtractor:
 
     def __next__(self):
         self.key, idx_key = jax.random.split(self.key) # split PRNG key into 2 new keys
-        idx_array = jax.random.randint(idx_key, (self.batch_size,), 0, self.total_frames) # sample uniform random values (frame indices) in [0, self.total_frames)
+        idx_array = jax.random.randint(idx_key, (self.batch_size,), 0, self.total_frames) # sample uniform random values in [0, self.total_frames)
         frames = []
         # global = across all videos, local = within a video
-        for global_idx in idx_array: 
-            # find local index 
-            # local_idx = int(global_idx)
-            # video_idx = 0
-            # while local_idx >= int(cv2.VideoCapture(os.path.join(self.directory_path, self.video_files[video_idx])).get(cv2.CAP_PROP_FRAME_COUNT)):
-            #     local_idx -= int(cv2.VideoCapture(os.path.join(self.directory_path, self.video_files[video_idx])).get(cv2.CAP_PROP_FRAME_COUNT))
-            #     video_idx += 1
-
+        for global_idx in idx_array:
+            # find local index
             video_idx = bisect.bisect_right(self.cumsum_frames, global_idx) - 1
             local_idx = int(global_idx) - self.cumsum_frames[video_idx]
                 
@@ -48,7 +42,7 @@ class FrameExtractor:
             self.cap.release()
 
             if ret:
-                #resize video to specified target size
+                # resize video to specified target size
                 # frame = cv2.resize(frame, self.target_size)
                 frames.append(frame)
 

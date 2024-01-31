@@ -168,7 +168,6 @@ def train(args, cfg):
         os.makedirs(dir_name)
     ################### ORIGINAL TRAINING LOOP #####################
     with open(metrics_path,"a") as f:
-        #TODO: Fix Frame extractor rng
         with frame_extractor.FrameExtractor(video_paths_train, batch_size, state[2]) as train_fe:
             with frame_extractor.FrameExtractor(video_paths_val, batch_size, state[2]) as val_fe:
                 for _ in utils.tqdm_inf():
@@ -216,7 +215,6 @@ def train(args, cfg):
     # print(f"Sharding : {sharding}\n\n")
 
     # with open(metrics_path,"a") as f:
-    #     #TODO: Fix Frame extractor rng
     #     with frame_extractor.FrameExtractor(video_paths_train, batch_size, state[2]) as train_fe:
     #         with frame_extractor.FrameExtractor(video_paths_val, batch_size, state[2]) as val_fe:
     #             for _ in utils.tqdm_inf():
