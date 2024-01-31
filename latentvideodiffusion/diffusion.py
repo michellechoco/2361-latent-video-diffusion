@@ -190,9 +190,8 @@ def train(args, cfg):
         state = utils.load_checkpoint(checkpoint_path)
     
     with open(metrics_path,"w") as f:
-        #TODO: Fix LatentDataset RNG
         with latent_dataset.LatentDataset(data_directory=args.data_dir, 
-            batch_size=batch_size, prompt_length=l_x, completion_length=l_y) as ld:
+            batch_size=batch_size, prompt_length=l_x, completion_length=l_y, key=state[2]) as ld:
             for _ in utils.tqdm_inf():
                 data = sample_datapoint(next(ld),state[2])
                 loss, state = utils.update_state(state, data, optimizer, loss_fn)

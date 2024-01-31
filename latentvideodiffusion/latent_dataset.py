@@ -2,16 +2,18 @@ import os
 import random
 import pickle
 import numpy as np
+import jax
 import jax.numpy as jnp
 
 
 class LatentDataset:
-    def __init__(self, data_directory, batch_size, prompt_length, completion_length):
+    def __init__(self, data_directory, batch_size, prompt_length, completion_length, key):
         self.data_directory = data_directory
         self.batch_size = batch_size
         self.prompt_length = prompt_length
         self.completion_length = completion_length
         self.segment_length = self.prompt_length + self.completion_length
+        self.key = key
 
     def __enter__(self):
         # Initialization code that will run when entering the "with" block
@@ -32,7 +34,9 @@ class LatentDataset:
 
     def load_random_file(self):
         # Randomly select a file based on weighted probabilities and load its data
-        random_file = np.random.choice(self.file_list, p=self.file_probabilities)
+        self.key, idx_key = jax.random.split(self.key)
+        random_file_idx = jax.random.choice(idx_key, np.size(self.file_list), p=np.array(self.file_probabilities))
+        random_file = self.file_list[random_file_idx]
         with open(os.path.join(self.data_directory, random_file), 'rb') as f:
             data_tuple = pickle.load(f)
         return data_tuple
@@ -40,7 +44,8 @@ class LatentDataset:
     def get_random_segment(self, data_tuple):
         # Randomly select a start index for the segment
         array_length = len(data_tuple[0])
-        start_idx = random.randint(0, array_length - self.segment_length)
+        self.key, idx_key = jax.random.split(self.key)
+        start_idx = jax.random.randint(idx_key, (1,), 0, array_length - self.segment_length)[0]
         
         # Extract the segment from both arrays in the tuple
         segment_mean = data_tuple[0][start_idx:start_idx + self.segment_length]
